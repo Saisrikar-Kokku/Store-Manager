@@ -4,8 +4,6 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { BusinessProvider } from '../context/TransactionContext';
 import InventoryDashboard from '../components/InventoryDashboard';
-import InventoryManager from '../components/InventoryManager';
-import SalesEntryForm from '../components/SalesEntryForm';
 import ProfitLossChart from '../components/ProfitLossChart';
 import CategoryWiseBreakdown from '../components/CategoryWiseBreakdown';
 import ClothingStoreDemo from '../components/ClothingStoreDemo';
@@ -127,14 +125,11 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
               <ProfitLossChart />
               <CategoryWiseBreakdown />
-            </div>
-          </main>
-
-          {/* Remove Floating Action Buttons */}
-          {/* <InventoryManager /> */}
-          {/* <SalesEntryForm /> */}
-          <InventoryList />
         </div>
+      </main>
+
+          <InventoryList />
+    </div>
       </BusinessProvider>
     </ClerkAuthWrapper>
   );

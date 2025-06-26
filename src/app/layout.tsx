@@ -30,7 +30,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body
+      <body
           className={`${inter.variable} ${spaceGrotesk.variable} antialiased font-sans bg-black text-white min-h-screen`}
         >
           <header className="glass flex items-center justify-between px-6 py-4 border-b border-luvora/30 bg-black/80 sticky top-0 z-50">
@@ -45,11 +45,11 @@ export default function RootLayout({
           </header>
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="glass p-6 rounded-2xl shadow-lg">
-              {children}
+        {children}
             </div>
           </main>
-        </body>
-      </html>
+      </body>
+    </html>
     </ClerkProvider>
   );
 }
