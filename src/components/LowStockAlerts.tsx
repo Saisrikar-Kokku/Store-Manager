@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Bell, Settings, CheckCircle } from 'lucide-react';
 import { useBusiness } from '../context/TransactionContext';
+import Image from 'next/image';
 
 const LowStockAlerts: React.FC = () => {
   const { state } = useBusiness();
@@ -81,7 +82,13 @@ const LowStockAlerts: React.FC = () => {
                 className="bg-white rounded-lg p-4 border border-red-200 shadow-sm flex items-center gap-4"
               >
                 {item.photo_url ? (
-                  <img src={item.photo_url} alt={item.name} className="w-12 h-12 object-cover rounded border border-luvora" />
+                  <Image
+                    src={item.photo_url}
+                    alt={item.name}
+                    width={48}
+                    height={48}
+                    className="w-12 h-12 object-cover rounded border border-luvora"
+                  />
                 ) : null}
                 <div className="flex-1">
                   <h4 className="font-semibold text-gray-800 mb-2">{item.name}</h4>
