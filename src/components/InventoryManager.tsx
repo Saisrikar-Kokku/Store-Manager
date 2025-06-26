@@ -6,6 +6,7 @@ import { Plus, X, Package, DollarSign, Hash, Calendar, FileText, AlertTriangle }
 import { useBusiness } from '../context/TransactionContext';
 import { getCategoryIcon } from '../utils/formatCurrency';
 import { supabase } from '../utils/supabaseClient';
+import Image from 'next/image';
 
 interface InventoryManagerProps {
   forceOpen?: boolean;
@@ -252,7 +253,13 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({ forceOpen, onClose 
                     className="hidden"
                   />
                   {photoPreview && (
-                    <img src={photoPreview} alt="Preview" className="rounded-lg max-h-16 border border-luvora" />
+                    <Image
+                      src={photoPreview}
+                      alt="Preview"
+                      width={64}
+                      height={64}
+                      className="rounded-lg max-h-16 border border-luvora"
+                    />
                   )}
                 </div>
                 {uploadError && <div className="text-red-400 text-xs mt-1">{uploadError}</div>}

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useBusiness } from '../context/TransactionContext';
 import { Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Image from 'next/image';
 
 const InventoryList: React.FC = () => {
   const { state, deleteInventoryItem } = useBusiness();
@@ -40,7 +41,13 @@ const InventoryList: React.FC = () => {
           {state.inventory.map(item => (
             <li key={item.id} className="flex items-center py-4 gap-4">
               {item.photo_url ? (
-                <img src={item.photo_url} alt={item.name} className="w-12 h-12 object-cover rounded-lg border border-luvora" />
+                <Image
+                  src={item.photo_url}
+                  alt={item.name}
+                  width={48}
+                  height={48}
+                  className="w-12 h-12 object-cover rounded-lg border border-luvora"
+                />
               ) : (
                 <div className="w-12 h-12 bg-pink-900/20 rounded-lg border border-luvora flex items-center justify-center">
                   <span className="text-pink-300 text-xs">No image</span>

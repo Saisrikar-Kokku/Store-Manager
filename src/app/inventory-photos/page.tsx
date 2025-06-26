@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { useBusiness } from "@/context/TransactionContext";
+import Image from 'next/image';
 
 const InventoryPhotosPage: React.FC = () => {
   const { state } = useBusiness();
@@ -16,9 +17,11 @@ const InventoryPhotosPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
             {itemsWithPhotos.map(item => (
               <div key={item.id} className="bg-black/70 rounded-xl p-4 border border-luvora flex flex-col items-center">
-                <img
-                  src={item.photo_url}
+                <Image
+                  src={item.photo_url || '/placeholder.png'}
                   alt={item.name}
+                  width={240}
+                  height={192}
                   className="w-full h-48 object-cover rounded mb-3 border border-luvora"
                   style={{ maxWidth: 240 }}
                 />

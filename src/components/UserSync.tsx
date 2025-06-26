@@ -1,6 +1,4 @@
 "use client";
-import { useEffect } from 'react';
-import { useUser } from '@clerk/nextjs';
 
 const UserSync: React.FC = () => {
   // const { user } = useUser();
