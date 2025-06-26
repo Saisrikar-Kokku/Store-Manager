@@ -5,8 +5,14 @@ import { motion } from 'framer-motion';
 import { Plus, X, Package, DollarSign, Hash, Calendar, FileText, AlertTriangle } from 'lucide-react';
 import { useBusiness } from '../context/TransactionContext';
 import { getCategoryIcon } from '../utils/formatCurrency';
+import { supabase } from '../utils/supabaseClient';
 
-const InventoryManager: React.FC = () => {
+interface InventoryManagerProps {
+  forceOpen?: boolean;
+  onClose?: () => void;
+}
+
+const InventoryManager: React.FC<InventoryManagerProps> = ({ forceOpen, onClose }) => {
   const { state, addInventoryItem } = useBusiness();
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -17,7 +23,12 @@ const InventoryManager: React.FC = () => {
     vendor: '',
     dateAdded: new Date().toISOString().split('T')[0],
     notes: '',
+    photoFile: null as File | null,
   });
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const categories = [
     'Shirts', 'Pants', 'Dresses', 'Jackets', 'Shoes', 'Accessories',
@@ -25,11 +36,40 @@ const InventoryManager: React.FC = () => {
     'Formal Wear', 'Casual Wear', 'Winter Wear', 'Summer Wear', 'Other'
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files && e.target.files[0];
+    setFormData((prev) => ({ ...prev, photoFile: file || null }));
+    if (file) {
+      setPhotoPreview(URL.createObjectURL(file));
+    } else {
+      setPhotoPreview(null);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.category || !formData.costPrice || !formData.quantity) return;
-
-    addInventoryItem({
+    setUploading(true);
+    setUploadError(null);
+    setSuccessMessage(null);
+    let photo_url = '';
+    if (formData.photoFile) {
+      const fileExt = formData.photoFile.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+      const { error } = await supabase.storage
+        .from('inventory-photos')
+        .upload(fileName, formData.photoFile, { upsert: false });
+      if (error) {
+        setUploadError('Failed to upload image: ' + error.message);
+        setUploading(false);
+        return;
+      }
+      const { data: publicUrlData } = supabase.storage
+        .from('inventory-photos')
+        .getPublicUrl(fileName);
+      photo_url = publicUrlData?.publicUrl || '';
+    }
+    await addInventoryItem({
       name: formData.name,
       category: formData.category,
       costPrice: parseFloat(formData.costPrice),
@@ -37,8 +77,8 @@ const InventoryManager: React.FC = () => {
       vendor: formData.vendor,
       dateAdded: formData.dateAdded,
       notes: formData.notes,
+      photo_url,
     });
-
     setFormData({
       name: '',
       category: '',
@@ -47,30 +87,43 @@ const InventoryManager: React.FC = () => {
       vendor: '',
       dateAdded: new Date().toISOString().split('T')[0],
       notes: '',
+      photoFile: null,
     });
+    setPhotoPreview(null);
+    setUploading(false);
+    setSuccessMessage('Inventory item added successfully!');
+    setTimeout(() => setSuccessMessage(null), 2500);
     setIsOpen(false);
   };
 
   const lowStockItems = state.inventory.filter(item => item.quantity <= 5);
 
+  const modalOpen = forceOpen !== undefined ? forceOpen : isOpen;
+  const closeModal = () => {
+    if (onClose) onClose();
+    else setIsOpen(false);
+  };
+
   return (
     <>
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full shadow-lg flex items-center justify-center text-white hover:shadow-xl transition-shadow"
-      >
-        <Plus className="w-6 h-6" />
-      </motion.button>
+      {forceOpen === undefined && (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-24 right-6 z-50 w-14 h-14 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full shadow-lg flex items-center justify-center text-white hover:shadow-xl transition-shadow"
+        >
+          <Plus className="w-6 h-6" />
+        </motion.button>
+      )}
 
-      {isOpen && (
+      {modalOpen && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4"
-          onClick={() => setIsOpen(false)}
+          onClick={closeModal}
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -82,7 +135,7 @@ const InventoryManager: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-800">Add Inventory Item</h2>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={closeModal}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -184,13 +237,38 @@ const InventoryManager: React.FC = () => {
                 />
               </div>
 
+              {/* Photo Upload */}
+              <div>
+                <label className="block text-sm font-medium text-pink-200 mb-1">Inventory Photo (optional)</label>
+                <div className="flex items-center gap-4">
+                  <label htmlFor="photo-upload" className="px-4 py-2 bg-luvora text-white rounded-lg cursor-pointer hover:bg-pink-700 transition-colors font-semibold shadow">
+                    {formData.photoFile ? 'Change Photo' : 'Upload Photo'}
+                  </label>
+                  <input
+                    id="photo-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                  />
+                  {photoPreview && (
+                    <img src={photoPreview} alt="Preview" className="rounded-lg max-h-16 border border-luvora" />
+                  )}
+                </div>
+                {uploadError && <div className="text-red-400 text-xs mt-1">{uploadError}</div>}
+              </div>
+              {successMessage && (
+                <div className="text-green-400 text-center font-semibold mb-2 animate-fade-in">{successMessage}</div>
+              )}
+
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 className="w-full py-3 rounded-lg bg-luvora text-white font-bold shadow hover:bg-pink-700 transition"
+                disabled={uploading}
               >
-                Add to Inventory
+                {uploading ? 'Uploading...' : 'Add to Inventory'}
               </motion.button>
             </form>
           </motion.div>

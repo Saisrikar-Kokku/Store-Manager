@@ -11,8 +11,12 @@ import CategoryWiseBreakdown from '../components/CategoryWiseBreakdown';
 import ClothingStoreDemo from '../components/ClothingStoreDemo';
 import PaymentSummaryCard from '../components/PaymentSummaryCard';
 import PendingPaymentsTable from '../components/PendingPaymentsTable';
-import ClerkAuthWrapper from '../components/ClerkAuthWrapper';
 import InventoryList from '../components/InventoryList';
+import Link from 'next/link';
+import { Bell, Users, Camera, FileText, BarChart3, Settings } from 'lucide-react';
+import LowStockAlertSummary from '../components/LowStockAlertSummary';
+import InventoryActions from '../components/InventoryActions';
+import ClerkAuthWrapper from '../components/ClerkAuthWrapper';
 
 export default function Home() {
   return (
@@ -44,6 +48,67 @@ export default function Home() {
             </div>
           </motion.header>
 
+          {/* Navigation */}
+          <motion.nav
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white shadow-sm border-b border-gray-200"
+          >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center space-x-8 py-4 overflow-x-auto">
+                <Link
+                  href="/low-stock"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-luvora hover:bg-luvora/5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <Bell className="w-4 h-4" />
+                  <span>Low Stock Alerts</span>
+                </Link>
+                <Link
+                  href="/suppliers"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-luvora hover:bg-luvora/5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Suppliers</span>
+                </Link>
+                <Link
+                  href="/inventory-photos"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-luvora hover:bg-luvora/5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Inventory Photos</span>
+                </Link>
+                <Link
+                  href="/batch-import"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-luvora hover:bg-luvora/5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Batch Import/Export</span>
+                </Link>
+                <Link
+                  href="/reorder-points"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-luvora hover:bg-luvora/5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Reorder Points</span>
+                </Link>
+                <Link
+                  href="/inventory-reports"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-luvora hover:bg-luvora/5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>Reports</span>
+                </Link>
+              </div>
+            </div>
+          </motion.nav>
+
+          {/* Low Stock Alert Banner */}
+          <LowStockAlertSummary />
+
+          {/* Inventory Actions */}
+          <InventoryActions />
+
           {/* Main Content */}
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {/* Demo Data */}
@@ -65,9 +130,9 @@ export default function Home() {
             </div>
           </main>
 
-          {/* Floating Action Buttons */}
-          <InventoryManager />
-          <SalesEntryForm />
+          {/* Remove Floating Action Buttons */}
+          {/* <InventoryManager /> */}
+          {/* <SalesEntryForm /> */}
           <InventoryList />
         </div>
       </BusinessProvider>

@@ -36,8 +36,6 @@ const LowStockItems: React.FC = () => {
 
   const handleUpdateStock = async () => {
     if (!selectedItem || quantity <= 0) return;
-    console.log('Updating item:', selectedItem);
-    console.log('Current inventory:', state.inventory.map(i => i.id));
     setIsUpdating(true);
     const updatedItem = {
       ...selectedItem,

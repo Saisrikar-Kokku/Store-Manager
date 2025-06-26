@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import { ClerkProvider } from '@clerk/nextjs';
 import Image from 'next/image';
 import React from 'react';
 import ThemeToggle from '@/components/ThemeToggle';
+import { ClerkProvider } from '@clerk/nextjs';
 
 const inter = Inter({
   variable: "--font-inter",

@@ -11,6 +11,8 @@ const InventoryDashboard: React.FC = () => {
   const { state } = useBusiness();
   const { stats } = state;
 
+  const hasPhotos = state.inventory.some(item => item.photo_url);
+
   const metrics = [
     {
       title: 'Total Investment',
@@ -69,6 +71,11 @@ const InventoryDashboard: React.FC = () => {
 
   return (
     <div className="w-full">
+      {hasPhotos && (
+        <div className="mb-4 text-sm text-luvora bg-black/60 rounded-xl p-3 border border-luvora">
+          📸 Some inventory items have photos! View them in the inventory list or low stock alerts.
+        </div>
+      )}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

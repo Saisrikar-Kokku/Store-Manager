@@ -6,7 +6,12 @@ import { ShoppingCart, X, Package, DollarSign, Hash, Calendar, FileText, User } 
 import { useBusiness } from '../context/TransactionContext';
 import { getCategoryIcon, calculateProfit } from '../utils/formatCurrency';
 
-const SalesEntryForm: React.FC = () => {
+interface SalesEntryFormProps {
+  forceOpen?: boolean;
+  onClose?: () => void;
+}
+
+const SalesEntryForm: React.FC<SalesEntryFormProps> = ({ forceOpen, onClose }) => {
   const { state, addSale, userId } = useBusiness();
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -71,24 +76,32 @@ const SalesEntryForm: React.FC = () => {
     ? calculateProfit(parseFloat(formData.salePrice), selectedItem.costPrice, parseInt(formData.quantity))
     : 0;
 
+  const modalOpen = forceOpen !== undefined ? forceOpen : isOpen;
+  const closeModal = () => {
+    if (onClose) onClose();
+    else setIsOpen(false);
+  };
+
   return (
     <>
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-20 z-50 w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full shadow-lg flex items-center justify-center text-white hover:shadow-xl transition-shadow"
-      >
-        <ShoppingCart className="w-6 h-6" />
-      </motion.button>
+      {forceOpen === undefined && (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-6 right-24 z-50 w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full shadow-lg flex items-center justify-center text-white hover:shadow-xl transition-shadow"
+        >
+          <ShoppingCart className="w-6 h-6" />
+        </motion.button>
+      )}
 
-      {isOpen && (
+      {modalOpen && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4"
-          onClick={() => setIsOpen(false)}
+          onClick={closeModal}
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -100,7 +113,7 @@ const SalesEntryForm: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-800">Record Sale</h2>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={closeModal}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X className="w-5 h-5" />

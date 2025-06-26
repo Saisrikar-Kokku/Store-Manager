@@ -8,6 +8,7 @@ export interface InventoryItem {
   dateAdded: string;
   notes?: string;
   userId?: string;
+  photo_url?: string;
 }
 
 export interface Sale {

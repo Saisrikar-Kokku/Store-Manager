@@ -1,8 +1,8 @@
 'use client';
 
 import { BusinessProvider } from '@/context/TransactionContext';
-import { ClerkProvider } from '@clerk/nextjs';
 import { Inter } from 'next/font/google';
+import ClerkAuthWrapper from '@/components/ClerkAuthWrapper';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -12,12 +12,12 @@ export default function AddInventoryLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
+    <ClerkAuthWrapper>
       <BusinessProvider>
         <div className={inter.className}>
           {children}
         </div>
       </BusinessProvider>
-    </ClerkProvider>
+    </ClerkAuthWrapper>
   );
 } 

@@ -3,8 +3,9 @@
 import React, { createContext, useContext } from 'react';
 import { Transaction, BusinessStats, InventoryItem, Sale, PendingPayment, PaymentSummary } from '../types';
 import { calculateDaysPending } from '../utils/formatCurrency';
-import { useUser } from '@clerk/nextjs';
+// import { useUser } from '@clerk/nextjs';
 import { supabase } from '../utils/supabaseClient';
+import toast from 'react-hot-toast';
 
 interface BusinessState {
   transactions: Transaction[];
@@ -24,12 +25,15 @@ interface BusinessContextType {
   deleteTransaction: (id: string) => void;
   getInventoryItem: (id: string) => InventoryItem | undefined;
   userId: string | null;
+  deleteInventoryItem: (id: string) => void;
 }
 
 const BusinessContext = createContext<BusinessContextType | undefined>(undefined);
 
 export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isLoaded } = useUser();
+  // const { user, isLoaded } = useUser();
+  const user = { id: 'local-dev-user' };
+  const isLoaded = true;
   const userId = user?.id ?? null;
   const [state, setState] = React.useState<BusinessState>({
     transactions: [],
@@ -164,7 +168,7 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addInventoryItem = async (itemData: Omit<InventoryItem, 'id'>) => {
     if (!userId) return;
-    const { name, category, costPrice, quantity, vendor, dateAdded, notes } = itemData;
+    const { name, category, costPrice, quantity, vendor, dateAdded, notes, photo_url } = itemData;
     const payload = {
       user_id: userId,
       name: name || 'Unnamed',
@@ -173,9 +177,9 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       quantity: typeof quantity === 'number' ? quantity : 0,
       vendor: vendor || '',
       date_added: dateAdded || null,
-      notes: notes || ''
+      notes: notes || '',
+      photo_url: photo_url || null,
     };
-    console.log('Inserting inventory:', payload);
     const { error } = await supabase
       .from('inventory')
       .insert([payload])
@@ -234,18 +238,21 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!inventoryItem) {
       // TODO: Show error to user: Item not found
       console.error('Sale failed: Inventory item not found');
+      toast.error('Sale failed: Inventory item not found');
       return;
     }
     // 2. Validate input
     if (saleData.quantity <= 0 || saleData.salePrice < 0 || saleData.costPrice < 0) {
       // TODO: Show error to user: Invalid input values
       console.error('Sale failed: Invalid input values');
+      toast.error('Sale failed: Invalid input values');
       return;
     }
     // 3. Prevent overselling
     if (saleData.quantity > inventoryItem.quantity) {
       // TODO: Show error to user: Not enough stock
       console.error('Sale failed: Not enough stock');
+      toast.error('Sale failed: Not enough stock');
       return;
     }
     // TODO: Show loading state in UI
@@ -275,9 +282,10 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (error) {
       // TODO: Show error to user: Could not add sale
       console.error('Error adding sale:', error);
+      toast.error('Could not add sale. Please try again.');
       return;
     } else {
-      console.log('Sale added successfully:', data);
+      toast.success('Sale recorded successfully.');
     }
     if (data) {
       // Map all fields to camelCase for local state
@@ -310,6 +318,7 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (invError) {
         // TODO: Show error to user: Could not update inventory
         console.error('Error updating inventory quantity:', invError);
+        toast.error('Could not update inventory after sale.');
         // Optionally, you could roll back the sale here
         return;
       }
@@ -346,8 +355,6 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       .select();
     if (error) {
       console.error('Error updating payment status:', error);
-    } else {
-      console.log('Payment status updated successfully:', data);
     }
     if (!error && data) {
       setState(prev => {
@@ -397,6 +404,60 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return state.inventory.find(item => item.id === id);
   };
 
+  const deleteInventoryItem = async (id: string) => {
+    if (!userId) return;
+
+    try {
+      // First, get the item to check if it has a photo
+      const item = state.inventory.find(i => i.id === id);
+      
+      // Delete from Supabase - this will cascade delete related sales
+      const { error, status } = await supabase
+        .from('inventory')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      // Status 204 means success for DELETE operations
+      if (error || (status !== 200 && status !== 204)) {
+        console.error('Supabase delete response:', { error, status });
+        throw new Error(
+          error?.message || `Failed to delete inventory item (status: ${status})`
+        );
+      }
+
+      // If item had a photo, delete it from storage
+      if (item?.photo_url) {
+        const fileName = item.photo_url.split('/').pop();
+        if (fileName) {
+          const { error: storageError } = await supabase.storage
+            .from('inventory-photos')
+            .remove([fileName]);
+          if (storageError) {
+            console.error('Error deleting photo from storage:', storageError);
+          }
+        }
+      }
+
+      // Update local state - remove the item from inventory and related sales
+      setState(prev => {
+        const updatedInventory = prev.inventory.filter(item => item.id !== id);
+        const updatedSales = prev.sales.filter(sale => sale.itemId !== id);
+        return {
+          ...prev,
+          inventory: updatedInventory,
+          sales: updatedSales,
+          stats: calculateBusinessStats(updatedInventory, updatedSales, prev.transactions),
+          pendingPayments: calculatePendingPayments(updatedSales),
+          paymentSummary: calculatePaymentSummary(updatedSales)
+        };
+      });
+    } catch (error) {
+      console.error('Error deleting inventory item:', error);
+      throw error; // Re-throw to handle in the component
+    }
+  };
+
   if (!isLoaded || !userId || !isReady) {
     return <div className="flex items-center justify-center min-h-screen text-gray-500">Loading your business data...</div>;
   }
@@ -411,6 +472,7 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       deleteTransaction,
       getInventoryItem,
       userId,
+      deleteInventoryItem,
     }}>
       {children}
     </BusinessContext.Provider>
