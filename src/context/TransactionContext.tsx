@@ -3,8 +3,8 @@
 import React, { createContext, useContext } from 'react';
 import { Transaction, BusinessStats, InventoryItem, Sale, PendingPayment, PaymentSummary } from '../types';
 import { calculateDaysPending } from '../utils/formatCurrency';
-// import { useUser } from '@clerk/nextjs';
-import { supabase } from '../utils/supabaseClient';
+import { useUser } from '@clerk/nextjs';
+import { supabase, testRLSAccess, diagnoseRLSIssue } from '../utils/supabaseClient';
 import toast from 'react-hot-toast';
 
 interface BusinessState {
@@ -26,14 +26,13 @@ interface BusinessContextType {
   getInventoryItem: (id: string) => InventoryItem | undefined;
   userId: string | null;
   deleteInventoryItem: (id: string) => void;
+  refetchAllData: () => Promise<void>;
 }
 
 const BusinessContext = createContext<BusinessContextType | undefined>(undefined);
 
 export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // const { user, isLoaded } = useUser();
-  const user = { id: 'local-dev-user' };
-  const isLoaded = true;
+  const { user, isLoaded } = useUser();
   const userId = user?.id ?? null;
   const [state, setState] = React.useState<BusinessState>({
     transactions: [],
@@ -65,56 +64,93 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Fetch all data from Supabase on login
   React.useEffect(() => {
-    if (!isLoaded || !userId) return;
+    if (!isLoaded) {
+      // Still loading Clerk authentication
+      return;
+    }
+    
+    if (!userId) {
+      // User is not authenticated, set ready to true to show sign-in
+      setIsReady(true);
+      return;
+    }
+    
     const fetchData = async () => {
       setIsReady(false);
-      // Fetch inventory
-      const { data: inventory } = await supabase
-        .from('inventory')
-        .select('*')
-        .eq('user_id', userId);
-      // Fix costPrice and quantity types
-      const inventoryFixed = (inventory || []).map(item => ({
-        ...item,
-        costPrice: Number(item.cost_price ?? 0),
-        quantity: Number(item.quantity ?? 0),
-      }));
-      // Fetch sales
-      const { data: sales } = await supabase
-        .from('sales')
-        .select('*')
-        .eq('user_id', userId);
-      // Fix sales types and keys
-      const salesFixed = (sales || []).map(sale => ({
-        ...sale,
-        quantity: Number(sale.quantity ?? 0),
-        salePrice: Number(sale.sale_price ?? 0),
-        costPrice: Number(sale.cost_price ?? 0),
-        profit: Number(sale.profit ?? 0),
-        paymentStatus: sale.payment_status,
-        paymentDate: sale.payment_date,
-        itemId: sale.item_id,
-        itemName: sale.item_name,
-        customerName: sale.customer_name,
-        createdAt: sale.created_at ? new Date(sale.created_at) : undefined,
-        // add more mappings as needed
-      }));
-      // Fetch transactions
-      const { data: transactions } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', userId);
-      setState(prev => ({
-        ...prev,
-        inventory: inventoryFixed,
-        sales: salesFixed,
-        transactions: transactions || [],
-        stats: calculateBusinessStats(inventoryFixed, salesFixed, transactions || []),
-        pendingPayments: calculatePendingPayments(salesFixed),
-        paymentSummary: calculatePaymentSummary(salesFixed),
-      }));
-      setIsReady(true);
+      try {
+        // Fetch inventory
+        const { data: inventory, error: inventoryError } = await supabase
+          .from('inventory')
+          .select('*')
+          .eq('user_id', userId);
+          
+        if (inventoryError) {
+          console.error('Error fetching inventory:', inventoryError);
+          toast.error('Failed to load inventory data');
+        }
+        
+        // Fix costPrice and quantity types
+        const inventoryFixed = (inventory || []).map(item => ({
+          ...item,
+          costPrice: Number(item.cost_price ?? 0),
+          quantity: Number(item.quantity ?? 0),
+        }));
+        
+        // Fetch sales
+        const { data: sales, error: salesError } = await supabase
+          .from('sales')
+          .select('*')
+          .eq('user_id', userId);
+          
+        if (salesError) {
+          console.error('Error fetching sales:', salesError);
+          toast.error('Failed to load sales data');
+        }
+        
+        // Fix sales types and keys
+        const salesFixed = (sales || []).map(sale => ({
+          ...sale,
+          quantity: Number(sale.quantity ?? 0),
+          salePrice: Number(sale.sale_price ?? 0),
+          costPrice: Number(sale.cost_price ?? 0),
+          profit: Number(sale.profit ?? 0),
+          paymentStatus: sale.payment_status,
+          paymentDate: sale.payment_date,
+          itemId: sale.item_id,
+          itemName: sale.item_name,
+          customerName: sale.customer_name,
+          createdAt: sale.created_at ? new Date(sale.created_at) : undefined,
+        }));
+        
+        // Fetch transactions
+        const { data: transactions, error: transactionsError } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', userId);
+          
+        if (transactionsError) {
+          console.error('Error fetching transactions:', transactionsError);
+          toast.error('Failed to load transaction data');
+        }
+        
+        setState(prev => ({
+          ...prev,
+          inventory: inventoryFixed,
+          sales: salesFixed,
+          transactions: transactions || [],
+          stats: calculateBusinessStats(inventoryFixed, salesFixed, transactions || []),
+          pendingPayments: calculatePendingPayments(salesFixed),
+          paymentSummary: calculatePaymentSummary(salesFixed),
+        }));
+        
+        setIsReady(true);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load business data');
+        setIsReady(true); // Set ready even on error to prevent infinite loading
+      }
     };
+    
     fetchData();
   }, [isLoaded, userId]);
 
@@ -167,7 +203,11 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const addInventoryItem = async (itemData: Omit<InventoryItem, 'id'>) => {
-    if (!userId) return;
+    if (!userId) {
+      toast.error('User not authenticated. Please sign in again.');
+      return;
+    }
+    
     const { name, category, costPrice, quantity, vendor, dateAdded, notes, photo_url } = itemData;
     const payload = {
       user_id: userId,
@@ -180,15 +220,24 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       notes: notes || '',
       photo_url: photo_url || null,
     };
-    const { error } = await supabase
-      .from('inventory')
-      .insert([payload])
-      .select();
-    if (error) {
+    
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .insert([payload])
+        .select();
+        
+      if (error) {
+        toast.error(`Failed to add inventory: ${error.message}`);
+        return;
+      }
+      
+      toast.success('Inventory item added successfully!');
+      await refetchAllData();
+    } catch (error) {
+      toast.error('An unexpected error occurred while adding inventory.');
       console.error('Error adding inventory:', error);
-      return;
     }
-    await refetchAllData();
   };
 
   const updateInventoryItem = async (item: InventoryItem) => {
@@ -233,61 +282,80 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addSale = async (saleData: Omit<Sale, 'id' | 'createdAt'>) => {
     if (!userId) return;
-    // 1. Find the inventory item
-    const inventoryItem = state.inventory.find(item => item.id === saleData.itemId);
-    if (!inventoryItem) {
-      // TODO: Show error to user: Item not found
-      console.error('Sale failed: Inventory item not found');
-      toast.error('Sale failed: Inventory item not found');
-      return;
-    }
-    // 2. Validate input
-    if (saleData.quantity <= 0 || saleData.salePrice < 0 || saleData.costPrice < 0) {
-      // TODO: Show error to user: Invalid input values
-      console.error('Sale failed: Invalid input values');
-      toast.error('Sale failed: Invalid input values');
-      return;
-    }
-    // 3. Prevent overselling
-    if (saleData.quantity > inventoryItem.quantity) {
-      // TODO: Show error to user: Not enough stock
-      console.error('Sale failed: Not enough stock');
-      toast.error('Sale failed: Not enough stock');
-      return;
-    }
-    // TODO: Show loading state in UI
-    const {
-      itemId, itemName, category, quantity, salePrice, costPrice, profit, date,
-      customerName, notes, paymentStatus, paymentDate
-    } = saleData;
-    const { data, error } = await supabase
-      .from('sales')
-      .insert([{
-        user_id: userId,
-        item_id: itemId,
-        item_name: itemName,
-        category,
+    
+    try {
+      // 1. Find the inventory item
+      const inventoryItem = state.inventory.find(item => item.id === saleData.itemId);
+      if (!inventoryItem) {
+        console.error('Sale failed: Inventory item not found');
+        toast.error('Sale failed: Inventory item not found');
+        return;
+      }
+      
+      // 2. Validate input
+      if (saleData.quantity <= 0 || saleData.salePrice < 0 || saleData.costPrice < 0) {
+        console.error('Sale failed: Invalid input values');
+        toast.error('Sale failed: Invalid input values');
+        return;
+      }
+      
+      // 3. Prevent overselling
+      if (saleData.quantity > inventoryItem.quantity) {
+        console.error('Sale failed: Not enough stock');
+        toast.error('Sale failed: Not enough stock');
+        return;
+      }
+      
+      const {
+        itemId, itemName, category, quantity, salePrice, costPrice, profit, date,
+        customerName, notes, paymentStatus, paymentDate
+      } = saleData;
+      
+      console.log('Adding sale with data:', {
+        userId,
+        itemId,
         quantity,
-        sale_price: salePrice,
-        cost_price: costPrice,
-        profit,
-        date,
-        customer_name: customerName,
-        notes,
-        payment_status: paymentStatus,
-        payment_date: paymentDate,
-        created_at: new Date().toISOString()
-      }])
-      .select();
-    if (error) {
-      // TODO: Show error to user: Could not add sale
-      console.error('Error adding sale:', error);
-      toast.error('Could not add sale. Please try again.');
-      return;
-    } else {
+        salePrice,
+        costPrice,
+        profit
+      });
+      
+      const { data, error } = await supabase
+        .from('sales')
+        .insert([{
+          user_id: userId,
+          item_id: itemId,
+          item_name: itemName,
+          category,
+          quantity,
+          sale_price: salePrice,
+          cost_price: costPrice,
+          profit,
+          date,
+          customer_name: customerName,
+          notes,
+          payment_status: paymentStatus,
+          payment_date: paymentDate,
+          created_at: new Date().toISOString()
+        }])
+        .select();
+        
+      console.log('Sale insert result:', { data, error });
+      
+      if (error) {
+        console.error('Error adding sale:', error);
+        toast.error(`Could not add sale: ${error.message || 'Unknown error'}`);
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        console.error('No data returned from sale insert');
+        toast.error('Sale was not recorded properly');
+        return;
+      }
+      
       toast.success('Sale recorded successfully.');
-    }
-    if (data) {
+      
       // Map all fields to camelCase for local state
       const newSale = {
         id: data[0].id,
@@ -306,22 +374,35 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         createdAt: data[0].created_at ? new Date(data[0].created_at) : new Date(),
         userId: data[0].user_id,
       };
+      
       const soldItemId = data[0].item_id;
       const soldQuantity = Number(data[0].quantity ?? 0);
+      
       // Update inventory in Supabase with the new quantity
       const newQuantity = Math.max(0, inventoryItem.quantity - soldQuantity);
-      const { error: invError } = await supabase
+      
+      console.log('Updating inventory:', {
+        soldItemId,
+        newQuantity,
+        userId
+      });
+      
+      const { error: invError, data: invData } = await supabase
         .from('inventory')
         .update({ quantity: newQuantity })
         .eq('id', soldItemId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select();
+        
+      console.log('Inventory update result:', { invData, invError });
+      
       if (invError) {
-        // TODO: Show error to user: Could not update inventory
         console.error('Error updating inventory quantity:', invError);
-        toast.error('Could not update inventory after sale.');
+        toast.error(`Could not update inventory after sale: ${invError.message || 'Unknown error'}`);
         // Optionally, you could roll back the sale here
         return;
       }
+      
       // Only update local state after both DB operations succeed
       setState(prev => {
         // Update inventory quantity locally
@@ -340,23 +421,155 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           paymentSummary: calculatePaymentSummary(newSales),
         };
       });
-      // TODO: Show success message in UI
+      
+    } catch (error) {
+      console.error('Unexpected error in addSale:', error);
+      toast.error('An unexpected error occurred while recording the sale');
     }
-    // TODO: Hide loading state in UI
   };
 
   const updatePaymentStatus = async (saleId: string, status: 'paid' | 'pending') => {
-    if (!userId) return;
-    const { data, error } = await supabase
-      .from('sales')
-      .update({ payment_status: status, payment_date: status === 'paid' ? new Date().toISOString().split('T')[0] : null })
-      .eq('id', saleId)
-      .eq('user_id', userId)
-      .select();
-    if (error) {
-      console.error('Error updating payment status:', error);
+    if (!userId) {
+      console.error('No user ID available for payment status update');
+      toast.error('User authentication required');
+      return;
     }
-    if (!error && data) {
+
+    try {
+      console.log('Updating payment status:', {
+        saleId,
+        status,
+        userId,
+        timestamp: new Date().toISOString()
+      });
+
+      // Test RLS policy access first
+      console.log('Testing RLS policy access...');
+      const rlsTestResult = await testRLSAccess(userId);
+      console.log('RLS test result:', rlsTestResult);
+      
+      // Diagnose RLS issue
+      const rlsDiagnosis = await diagnoseRLSIssue(userId);
+      console.log('RLS diagnosis:', rlsDiagnosis);
+      
+      const { data: testData, error: testError } = await supabase
+        .from('sales')
+        .select('id, payment_status')
+        .eq('user_id', userId)
+        .limit(1);
+
+      console.log('RLS test result:', { testData, testError });
+
+      // First, let's verify the sale exists and get current data
+      console.log('Attempting to fetch sale with ID:', saleId, 'for user:', userId);
+      
+      const { data: existingSale, error: fetchError, status: fetchStatus } = await supabase
+        .from('sales')
+        .select('*')
+        .eq('id', saleId)
+        .eq('user_id', userId)
+        .single();
+
+      console.log('Fetch sale response:', {
+        data: existingSale,
+        error: fetchError,
+        status: fetchStatus,
+        errorDetails: fetchError ? {
+          message: fetchError.message,
+          details: fetchError.details,
+          hint: fetchError.hint,
+          code: fetchError.code,
+          error: fetchError
+        } : null
+      });
+
+      if (fetchError) {
+        console.error('Error fetching sale for payment update:', {
+          error: fetchError,
+          details: fetchError.details,
+          hint: fetchError.hint,
+          code: fetchError.code,
+          message: fetchError.message,
+          fullError: JSON.stringify(fetchError, null, 2)
+        });
+        
+        // Check if it's an RLS policy issue
+        if (fetchError.code === 'PGRST116' || fetchError.message?.includes('policy')) {
+          toast.error('Access denied - Row Level Security policy issue. Please check database permissions.');
+        } else {
+          toast.error(`Could not find sale: ${fetchError.message || 'Sale not found'}`);
+        }
+        return;
+      }
+
+      if (!existingSale) {
+        console.error('Sale not found for payment update:', { saleId, userId });
+        toast.error('Sale not found');
+        return;
+      }
+
+      console.log('Found existing sale:', existingSale);
+
+      // Prepare update data
+      const updateData = {
+        payment_status: status,
+        payment_date: status === 'paid' ? new Date().toISOString().split('T')[0] : null
+      };
+
+      console.log('Update data:', updateData);
+
+      // Perform the update
+      const { data, error, status: updateStatus } = await supabase
+        .from('sales')
+        .update(updateData)
+        .eq('id', saleId)
+        .eq('user_id', userId)
+        .select();
+
+      console.log('Payment status update response:', {
+        data,
+        error,
+        status: updateStatus,
+        errorDetails: error ? {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        } : null
+      });
+
+      if (error) {
+        console.error('Error updating payment status:', {
+          error,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          message: error.message
+        });
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to update payment status';
+        if (error.code === '23505') {
+          errorMessage = 'Payment status update conflict - please try again';
+        } else if (error.code === '23503') {
+          errorMessage = 'Invalid sale reference';
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        toast.error(errorMessage);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        console.error('No data returned from payment status update');
+        toast.error('Payment status update failed - no data returned');
+        return;
+      }
+
+      console.log('Successfully updated payment status:', data[0]);
+
+      // Update local state
       setState(prev => {
         const newSales = prev.sales.map(s => (s.id === saleId ? {
           ...data[0],
@@ -371,6 +584,7 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           customerName: data[0].customer_name,
           createdAt: data[0].created_at ? new Date(data[0].created_at) : undefined,
         } : s));
+        
         return {
           ...prev,
           sales: newSales,
@@ -379,8 +593,17 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           paymentSummary: calculatePaymentSummary(newSales),
         };
       });
+
+      toast.success(`Payment marked as ${status}`);
+      
+    } catch (error) {
+      console.error('Unexpected error in updatePaymentStatus:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      toast.error('An unexpected error occurred while updating payment status');
     }
-    // Optionally, you can also call await refetchAllData(); if you want to always sync with DB
   };
 
   const deleteTransaction = async (id: string) => {
@@ -458,8 +681,45 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  if (!isLoaded || !userId || !isReady) {
-    return <div className="flex items-center justify-center min-h-screen text-gray-500">Loading your business data...</div>;
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-luvora mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!userId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-luvora mb-4">Welcome to LUVORA</h2>
+          <p className="text-gray-500 mb-6">Please sign in to access your inventory management dashboard</p>
+          <div className="flex justify-center">
+            <a 
+              href="/sign-in" 
+              className="bg-luvora text-white px-6 py-3 rounded-lg hover:bg-pink-700 transition-colors"
+            >
+              Sign In
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isReady) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-luvora mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading your business data...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -473,6 +733,7 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       getInventoryItem,
       userId,
       deleteInventoryItem,
+      refetchAllData,
     }}>
       {children}
     </BusinessContext.Provider>

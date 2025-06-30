@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BusinessProvider } from '../context/TransactionContext';
 import InventoryDashboard from '../components/InventoryDashboard';
@@ -11,12 +11,55 @@ import PaymentSummaryCard from '../components/PaymentSummaryCard';
 import PendingPaymentsTable from '../components/PendingPaymentsTable';
 import InventoryList from '../components/InventoryList';
 import Link from 'next/link';
-import { Bell, Users, Camera, FileText, BarChart3, Settings } from 'lucide-react';
+import { Bell, Users, Camera, FileText, Settings } from 'lucide-react';
 import LowStockAlertSummary from '../components/LowStockAlertSummary';
 import InventoryActions from '../components/InventoryActions';
 import ClerkAuthWrapper from '../components/ClerkAuthWrapper';
+import { isSupabaseConfigured, testSupabaseConnection, pingSupabase } from '../utils/supabaseClient';
 
 export default function Home() {
+  // Test Supabase connection on page load
+  useEffect(() => {
+    const testConnection = async () => {
+      if (isSupabaseConfigured()) {
+        console.log('=== SUPABASE CONNECTION TEST ===');
+        const result = await testSupabaseConnection();
+        console.log('Connection test result:', result);
+        
+        // Also try a simple ping
+        const pingResult = await pingSupabase();
+        console.log('Ping test result:', pingResult);
+      } else {
+        console.error('Supabase not configured');
+      }
+    };
+    
+    testConnection();
+  }, []);
+
+  // Check if Supabase is configured
+  if (!isSupabaseConfigured()) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black text-white p-8">
+        <div className="max-w-md w-full text-center">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold font-luvora text-luvora mb-4">LUVORA</h1>
+            <h2 className="text-xl font-bold text-red-500 mb-4">Configuration Required</h2>
+            <p className="text-gray-400 mb-4">
+              Missing Supabase environment variables. Please check your .env.local file and ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set.
+            </p>
+          </div>
+          
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 text-left text-sm">
+            <p className="text-gray-300 mb-2">Required environment variables:</p>
+            <code className="text-pink-300 block mb-1">NEXT_PUBLIC_SUPABASE_URL</code>
+            <code className="text-pink-300 block">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ClerkAuthWrapper>
       <BusinessProvider>
@@ -84,13 +127,6 @@ export default function Home() {
                   <span>Batch Import/Export</span>
                 </Link>
                 <Link
-                  href="/reorder-points"
-                  className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-luvora hover:bg-luvora/5 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  <span>Reorder Points</span>
-                </Link>
-                <Link
                   href="/inventory-reports"
                   className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-luvora hover:bg-luvora/5 rounded-lg transition-colors whitespace-nowrap"
                 >
@@ -125,11 +161,11 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
               <ProfitLossChart />
               <CategoryWiseBreakdown />
-        </div>
-      </main>
+            </div>
+          </main>
 
           <InventoryList />
-    </div>
+        </div>
       </BusinessProvider>
     </ClerkAuthWrapper>
   );

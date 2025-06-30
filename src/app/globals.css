@@ -4,14 +4,12 @@
   --background: #000000;
   --foreground: #ededed;
   --font-sans: var(--font-inter);
-  --font-display: var(--font-space-grotesk);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
-  --font-display: var(--font-space-grotesk);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,7 +42,7 @@ body {
 }
 
 .font-display {
-  font-family: var(--font-display), system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 /* Custom scrollbar */
@@ -130,6 +128,7 @@ body {
 
 /* LUVORA font for headings (if using Google Fonts, e.g., UnifrakturCook) */
 .font-luvora {
-  font-family: 'UnifrakturCook', cursive;
+  font-family: 'Inter', 'Arial Black', 'Helvetica Bold', sans-serif;
   letter-spacing: 0.05em;
+  font-weight: 900;
 }

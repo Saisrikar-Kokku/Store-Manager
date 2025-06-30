@@ -53,7 +53,7 @@ type SupplierForm = {
 };
 
 const SupplierManagement: React.FC = () => {
-  const { state } = useBusiness();
+  const { state, userId } = useBusiness();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,22 +114,118 @@ const SupplierManagement: React.FC = () => {
     const fetchSuppliers = async () => {
       setLoading(true);
       setError(null);
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        setError('Supabase environment variables are missing. Please check your .env.local file.');
+      
+      if (!userId) {
+        setError('User not authenticated');
         setLoading(false);
         return;
       }
-      const { data, error } = await supabase.from('suppliers').select('*').order('created_at', { ascending: false });
-      if (error) {
-        setError('Failed to fetch suppliers.');
+      
+      try {
+        console.log('=== SUPPLIER FETCH DEBUG ===');
+        console.log('User ID:', userId);
+        console.log('Supabase client:', supabase);
+        console.log('Environment check:', {
+          url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+          keyExists: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        });
+        
+        // Test basic Supabase connection first
+        console.log('Testing basic connection...');
+        const { data: testData, error: testError } = await supabase
+          .from('inventory')
+          .select('count')
+          .limit(1);
+          
+        console.log('Basic connection test:', { testData, testError });
+        
+        if (testError) {
+          console.error('Basic connection failed:', testError);
+          setError(`Database connection failed: ${testError.message || 'Unknown error'}`);
+          setLoading(false);
+          return;
+        }
+        
+        // Now try suppliers table
+        console.log('Testing suppliers table existence...');
+        const { data: tableTest, error: tableError } = await supabase
+          .from('suppliers')
+          .select('*')
+          .limit(1);
+          
+        console.log('Suppliers table test:', { tableTest, tableError });
+        
+        if (tableError) {
+          console.error('Suppliers table error:', tableError);
+          setError(`Suppliers table error: ${tableError.message || 'Unknown error'}`);
+          setSuppliers([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Now try with user filtering
+        console.log('Fetching suppliers with user filter...');
+        const { data, error } = await supabase
+          .from('suppliers')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+          
+        console.log('Suppliers query result:', { 
+          data: data?.length || 0, 
+          error: error ? {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          } : null 
+        });
+        
+        if (error) {
+          console.error('Suppliers query error details:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+            fullError: error
+          });
+          
+          // If user_id column doesn't exist, show all suppliers (temporary)
+          if (error.message && (error.message.includes('user_id') || error.message.includes('column'))) {
+            console.log('user_id column might not exist, fetching all suppliers');
+            const { data: fallbackData, error: fallbackError } = await supabase
+              .from('suppliers')
+              .select('*')
+              .order('created_at', { ascending: false });
+              
+            if (fallbackError) {
+              console.error('Fallback error:', fallbackError);
+              setError(`Failed to fetch suppliers: ${fallbackError.message || 'Unknown error'}`);
+            } else {
+              setSuppliers((fallbackData || []).map(mapDbToSupplier));
+            }
+          } else {
+            setError(`Failed to fetch suppliers: ${error.message || 'Unknown error'}`);
+            setSuppliers([]);
+          }
+        } else {
+          console.log('Suppliers fetched successfully:', data?.length || 0, 'items');
+          setSuppliers((data || []).map(mapDbToSupplier));
+        }
+      } catch (err) {
+        console.error('Unexpected error fetching suppliers:', err);
+        console.error('Error type:', typeof err);
+        console.error('Error constructor:', err?.constructor?.name);
+        console.error('Error stack:', (err as Error)?.stack);
+        setError(`An unexpected error occurred while fetching suppliers: ${err instanceof Error ? err.message : 'Unknown error'}`);
         setSuppliers([]);
-      } else {
-        setSuppliers((data || []).map(mapDbToSupplier));
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
+    
     fetchSuppliers();
-  }, []);
+  }, [userId]);
 
   const filteredSuppliers = suppliers.filter(supplier =>
     supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -138,9 +234,14 @@ const SupplierManagement: React.FC = () => {
 
   // Add supplier to Supabase
   const handleAddSupplier = async () => {
+    if (!userId) {
+      setError('User not authenticated');
+      return;
+    }
+    
     setError(null);
     const { data, error } = await supabase.from('suppliers').insert([
-      mapSupplierToDb({ ...newSupplier, rating: 0 })
+      { ...mapSupplierToDb({ ...newSupplier, rating: 0 }), user_id: userId }
     ]).select();
     if (error) {
       setError('Failed to add supplier.');
@@ -154,11 +255,11 @@ const SupplierManagement: React.FC = () => {
   // Edit supplier in Supabase
   const handleEditSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editSupplier) return;
+    if (!editSupplier || !userId) return;
     setError(null);
     const { data, error } = await supabase.from('suppliers').update(
       mapSupplierToDb(editForm)
-    ).eq('id', editSupplier.id).select();
+    ).eq('id', editSupplier.id).eq('user_id', userId).select();
     if (error) {
       setError('Failed to update supplier.');
       return;
@@ -172,9 +273,9 @@ const SupplierManagement: React.FC = () => {
 
   // Delete supplier from Supabase
   const handleDeleteSupplier = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this supplier?')) return;
+    if (!confirm('Are you sure you want to delete this supplier?') || !userId) return;
     setError(null);
-    const { error } = await supabase.from('suppliers').delete().eq('id', id);
+    const { error } = await supabase.from('suppliers').delete().eq('id', id).eq('user_id', userId);
     if (error) {
       setError('Failed to delete supplier.');
       return;

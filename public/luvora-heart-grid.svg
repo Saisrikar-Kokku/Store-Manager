@@ -1,0 +1,10 @@
+<svg width="600" height="400" viewBox="0 0 600 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="heartGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#ff007a" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path d="M300 370C-100 170 100 0 300 120C500 0 700 170 300 370Z" fill="url(#heartGradient)" stroke="#ff007a" stroke-width="4"/>
+  <text x="50%" y="60%" text-anchor="middle" fill="#ff007a" font-size="32" font-family="Arial" dy=".3em">LUVORA</text>
+</svg> 
